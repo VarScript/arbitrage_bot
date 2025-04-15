@@ -1,0 +1,9 @@
+# Rust
+/target/
+**/*.rs.bk
+
+# Environment files
+.env*
+.env.local
+.env*.secret
+
