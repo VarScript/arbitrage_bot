@@ -32,6 +32,7 @@ async fn main() -> anyhow::Result<()> {
     let routers = vec![
         ("Uniswap", "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"),
         ("SushiSwap", "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"),
+        ("PancakeSwap", "0x1097053Fd2ea711dad45caCcc45EfF7548fCB362"),
     ];
 
     println!("\n    📊  PRICE DISCOVERY");
@@ -40,13 +41,18 @@ async fn main() -> anyhow::Result<()> {
     let mut worst = ("", f64::MAX);
 
     for (name, router) in &routers {
-        if let Ok(price) = get_price_from_dex(client.clone(), router).await {
-            prices.insert(name, price);
-            if price > best.1 {
-                best = (name, price);
+        match get_price_from_dex(client.clone(), router).await {
+            Ok(price) => {
+                prices.insert(name, price);
+                if price > best.1 {
+                    best = (name, price);
+                }
+                if price < worst.1 {
+                    worst = (name, price);
+                }
             }
-            if price < worst.1 {
-                worst = (name, price);
+            Err(e) => {
+                println!("❌ Failed to get price from {}: {:?}", name, e);
             }
         }
     }
