@@ -1,6 +1,8 @@
 mod dex;
+mod tokens;
 
-use dex::get_price_from_dex;
+use dex::{get_prices_for_all_pairs, DexPrice};
+use tokens::TokenPairs;
 use dotenv::dotenv;
 use ethers::prelude::*;
 use std::{collections::HashMap, env, sync::Arc};
@@ -28,69 +30,79 @@ async fn main() -> anyhow::Result<()> {
     let eth_gas_cost_f64 = eth_gas_cost.as_u128() as f64 / 1e18;
     println!("    ├─ Estimated TX Cost: {:.6} ETH", eth_gas_cost_f64);
 
-    // Add PancakeSwap
     let routers = vec![
         ("Uniswap", "0x7a250d5630B4cF539739dF2C5dAcb4c659F2488D"),
         ("SushiSwap", "0xd9e1cE17f2641f24aE83637ab66a2cca9C378B9F"),
-        ("PancakeSwap", "0x1097053Fd2ea711dad45caCcc45EfF7548fCB362"),
     ];
 
+    let token_pairs = TokenPairs::new();
+    let mut all_prices: Vec<DexPrice> = Vec::new();
+
     println!("\n    📊  PRICE DISCOVERY");
-    let mut prices: HashMap<&str, f64> = HashMap::new();
-    let mut best = ("", 0.0);
-    let mut worst = ("", f64::MAX);
-
     for (name, router) in &routers {
-        match get_price_from_dex(client.clone(), router).await {
-            Ok(price) => {
-                prices.insert(name, price);
-                if price > best.1 {
-                    best = (name, price);
-                }
-                if price < worst.1 {
-                    worst = (name, price);
-                }
-            }
-            Err(e) => {
-                println!("❌ Failed to get price from {}: {:?}", name, e);
-            }
-        }
+        let prices = get_prices_for_all_pairs(client.clone(), router, name, &token_pairs.pairs).await;
+        all_prices.extend(prices);
     }
 
-    for (dex, price) in &prices {
-        let tag = if *dex == best.0 {
-            "🟢 (Best)"
-        } else if *dex == worst.0 {
-            "🔴 (Worst)"
-        } else {
-            " "
-        };
-        println!("    ├─ {:11}: {:>10.6} USDC  {}", dex, price, tag);
+    // Group prices by token pair
+    let mut pair_prices: HashMap<String, Vec<&DexPrice>> = HashMap::new();
+    for price in &all_prices {
+        pair_prices.entry(price.token_pair.clone())
+            .or_insert_with(Vec::new)
+            .push(price);
     }
 
-    let spread = best.1 - worst.1;
-    println!(
-        "    └─ Spread:     ████████ {:.2} USDC  📈",
-        spread
-    );
+    // Analyze each pair
+    for (pair_name, prices) in pair_prices {
+        println!("\n    {}:", pair_name.bright_yellow());
+        
+        let mut best = ("", 0.0);
+        let mut worst = ("", f64::MAX);
 
-    let gas_cost_usdc = eth_gas_cost_f64 * best.1;
-    let net_profit = spread - gas_cost_usdc;
-    let roi = (net_profit / (worst.1)) * 100.0;
-
-    println!("\n    💰  PROFIT ANALYSIS");
-    println!("    ├─ Gross Profit:  {:.2} USDC", spread);
-    println!("    ├─ Net Profit:    {:.2} USDC", net_profit);
-    println!("    └─ ROI:           {:.2}%  📊", roi);
-
-    let threshold = 2.0;
-    println!("\n    VERDICT: {}",
-        if net_profit > threshold {
-            format!("✅ EXECUTE ${:.2}  (Threshold: ${})", net_profit, threshold).green()
-        } else {
-            format!("❌ SKIP ${:.2}  (Below Threshold)", net_profit).red()
+        for price in &prices {
+            if price.price > best.1 {
+                best = (&price.dex_name, price.price);
+            }
+            if price.price < worst.1 {
+                worst = (&price.dex_name, price.price);
+            }
         }
-    );
+
+        for price in &prices {
+            let tag = if price.dex_name == best.0 {
+                "🟢 (Best)"
+            } else if price.dex_name == worst.0 {
+                "🔴 (Worst)"
+            } else {
+                " "
+            };
+            println!("    ├─ {:11}: {:>10.6}  {}", price.dex_name, price.price, tag);
+        }
+
+        let spread = best.1 - worst.1;
+        println!(
+            "    └─ Spread:     ████████ {:.6}  📈",
+            spread
+        );
+
+        let gas_cost_usdc = eth_gas_cost_f64 * best.1;
+        let net_profit = spread - gas_cost_usdc;
+        let roi = (net_profit / worst.1) * 100.0;
+
+        println!("    💰  PROFIT ANALYSIS");
+        println!("    ├─ Gross Profit:  {:.6}", spread);
+        println!("    ├─ Net Profit:    {:.6}", net_profit);
+        println!("    └─ ROI:           {:.2}%  📊", roi);
+
+        let threshold = 2.0;
+        println!("    VERDICT: {}",
+            if net_profit > threshold {
+                format!("✅ EXECUTE ${:.6}  (Threshold: ${})", net_profit, threshold).green()
+            } else {
+                format!("❌ SKIP ${:.6}  (Below Threshold)", net_profit).red()
+            }
+        );
+    }
 
     Ok(())
 }
