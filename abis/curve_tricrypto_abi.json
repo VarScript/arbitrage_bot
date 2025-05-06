@@ -1,0 +1,47 @@
+[
+    {
+      "name": "get_dy",
+      "inputs": [
+        { "name": "i", "type": "uint256" },
+        { "name": "j", "type": "uint256" },
+        { "name": "dx", "type": "uint256" }
+      ],
+      "outputs": [
+        { "name": "out", "type": "uint256" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "name": "coins",
+      "inputs": [
+        { "name": "i", "type": "uint256" }
+      ],
+      "outputs": [
+        { "name": "", "type": "address" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "name": "balances",
+      "inputs": [
+        { "name": "i", "type": "uint256" }
+      ],
+      "outputs": [
+        { "name": "", "type": "uint256" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    },
+    {
+      "name": "N_COINS",
+      "inputs": [],
+      "outputs": [
+        { "name": "", "type": "uint256" }
+      ],
+      "stateMutability": "view",
+      "type": "function"
+    }
+  ]
+  

@@ -1,7 +1,9 @@
 mod dex;
 mod tokens;
+mod curve;
 
-use dex::{get_prices_for_all_pairs, DexPrice};
+use dex::{get_prices_for_all_pairs as get_dex_prices, DexPrice};
+use curve::get_prices_for_all_pairs as get_curve_prices;
 use tokens::TokenPairs;
 use dotenv::dotenv;
 use ethers::prelude::*;
@@ -39,9 +41,21 @@ async fn main() -> anyhow::Result<()> {
     let mut all_prices: Vec<DexPrice> = Vec::new();
 
     println!("\n    📊  PRICE DISCOVERY");
+    
+    // Get prices from DEXes
     for (name, router) in &routers {
-        let prices = get_prices_for_all_pairs(client.clone(), router, name, &token_pairs.pairs).await;
+        let prices = get_dex_prices(client.clone(), router, name, &token_pairs.pairs).await;
         all_prices.extend(prices);
+    }
+
+    // Get prices from Curve
+    let curve_prices = get_curve_prices(client.clone(), &token_pairs.pairs).await;
+    for price in curve_prices {
+        all_prices.push(DexPrice {
+            dex_name: format!("Curve {}", price.pool_name),
+            price: price.price,
+            token_pair: price.token_pair,
+        });
     }
 
     // Group prices by token pair
